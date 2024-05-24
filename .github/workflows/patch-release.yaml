@@ -16,13 +16,26 @@ jobs:
             fetch-tags: True
       - name: Get latest tag
         run: |
+            echo "LATEST_VERSION=$(git describe --tags --abbrev=0)" >> $GITHUB_ENV
             echo "VERSION=$(git describe --tags --abbrev=0)" | \
                 sed -E 's/(v[0-9]+\.[0-9]+\.[0-9]+).*/\1/' >> $GITHUB_ENV
       - name: Get patch version
         run: |
             echo "PATCH=$(git rev-list ${VERSION}..HEAD --count)" >> $GITHUB_ENV
+      - name: Get current version
+        run: |
+            echo "RELEASE_VERSION=${VERSION}.${PATCH}" >> $GITHUB_ENV
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-            tag_name: ${{ env.VERSION }}.${{ env.PATCH }}
+            # Setting tag to have format:
+            # %latest llvm version%.%number of commits since that tag%
+            tag_name: ${{ env.RELEASE_VERSION }}
+            # We have to set this so tag is set on the branch that triggered
+            # a PR
             target_commitish: ${{ github.sha }}
+            # We don't want to mark patch releases latest unless it is latest
+            # major version
+            make_latest: False
+            name: SPIR-V LLVM translator based on LLVM ${{ env.VERSION }}
+            body: 'Full Changelog: ${{ github.server_url }}/${{ github.repository }}/compare/${{ env.LATEST_VERSION }}...${{ env.RELEASE_VERSION }}'
