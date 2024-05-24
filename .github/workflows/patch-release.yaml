@@ -1,0 +1,28 @@
+name: Main
+
+on:
+  push:
+    branches:
+        - llvm_release_*
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+            fetch-depth: 0
+            fetch-tags: True
+      - name: Get latest tag
+        run: |
+            echo "VERSION=$(git describe --tags --abbrev=0)" | \
+                sed -E 's/(v[0-9]+\.[0-9]+\.[0-9]+).*/\1/' >> $GITHUB_ENV
+      - name: Get patch version
+        run: |
+            echo "PATCH=$(git rev-list ${VERSION}..HEAD --count)" >> $GITHUB_ENV
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+            tag_name: ${{ env.VERSION }}.${{ env.PATCH }}
+            target_commitish: ${{ github.sha }}
