@@ -10,8 +10,8 @@ jobs:
   setup:
     runs-on: ubuntu-latest
     outputs:
-      latest_branch: $${{steps.latest_branch.outputs.latest_branch}}
-      branches_json: $${{steps.relase_branches.outputs.branches_json}}
+      latest_branch: ${{steps.latest_branch.outputs.latest_branch}}
+      branches_json: ${{steps.relase_branches.outputs.branches_json}}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,7 +34,7 @@ jobs:
           | grep "origin/llvm_release_" \
           | sed -E 's/\ *origin\/([^\ ]*)/\"\1\"/' \
           | paste -sd',' \
-          | xargs -0 -d"\n" printf 'branches_json={"branch":%s}' \
+          | xargs -0 -d"\n" printf 'branches_json={"branch":[%s]}' \
           >> $GITHUB_OUTPUT
   release:
     runs-on: ubuntu-latest
@@ -50,18 +50,22 @@ jobs:
       - name: Get commits info
         id: versions
         run: |
-            git describe --tags --abbrev=0 \
-            | sed -E 's/(v[0-9]+\.[0-9]+)\.([0-9]+).*/\1 \2/' \
-            read LLVM_VERSION PATCH
+            export LATEST_VERSION=\
+            "$(git describe --tags --abbrev=0 --match 'v*')"
+            export LLVM_VERSION=$(echo $LATEST_VERSION \
+            | sed -E 's/(v[0-9]+\.[0-9]+)\.([0-9]+).*/\1/')
+            export PATCH=$(echo $LATEST_VERSION \
+            | sed -E 's/(v[0-9]+\.[0-9]+)\.([0-9]+).*/\2/')
 
-            echo "llvm_version=$LLVM_VERSION" >> $GITHUB_OUTPUTS
-            echo "patch=$PATCH" >> $GITHUB_OUTPUTS
-            echo "latest_version=${LLVM_VERSION}.${PATCH}" >> $GITHUB_OUTPUTS
+            echo "llvm_version=$LLVM_VERSION" >> $GITHUB_OUTPUT
+            echo "patch=$PATCH" >> $GITHUB_OUTPUT
+            echo "latest_version=${LATEST_VERSION}" >> $GITHUB_OUTPUT
             echo "release_version=${LLVM_VERSION}.$((${PATCH}+1))" \
-            >> $GITHUB_OUTPUTS
+            >> $GITHUB_OUTPUT
 
-            git rev-list ${LATEST_VERSION}..HEAD --count | \
-            xargs printf "commits_since_last_release=%d" >> $GITHUB_OUTPUTS
+            git rev-list ${LATEST_VERSION}..HEAD --count \
+            | xargs printf "commits_since_last_release=%d\n" >> $GITHUB_OUTPUT
+            git rev-parse HEAD | xargs printf "last_commit=%s\n" >> $GITHUB_OUTPUT
       - name: Release
         uses: softprops/action-gh-release@v2
         if: ${{ steps.versions.outputs.commits_since_last_release != 0 }}
@@ -71,10 +75,10 @@ jobs:
             tag_name: ${{ steps.versions.outputs.release_version }}
             # We have to set this so tag is set on the branch that triggered
             # a PR
-            target_commitish: ${{ github.sha }}
+            target_commitish: ${{ steps.versions.outputs.last_commit }}
             # We don't want to mark patch releases latest unless it is latest
             # major version
-            make_latest: >
+            make_latest: >-
               ${{ needs.setup.outputs.latest_branch == matrix.branch }}
             name: >
               SPIR-V LLVM translator based on LLVM
